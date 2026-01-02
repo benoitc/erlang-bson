@@ -13,7 +13,9 @@
 %% API exports
 -export([
     new/1,
-    next/1
+    next/1,
+    peek/2,
+    find_path/2
 ]).
 
 %% Types
@@ -63,9 +65,71 @@ next(#bson_iter{bin = Bin, pos = Pos, doc_end = DocEnd} = Iter) ->
             end
     end.
 
+%% @doc Look up a key at the top level of a BSON document without decoding.
+%% Returns {ok, Type, ValueRef} if found, not_found if key doesn't exist,
+%% or {error, Reason} on malformed input.
+-spec peek(binary(), binary()) -> {ok, atom(), map()} | not_found | {error, term()}.
+peek(Bin, KeyBin) when is_binary(Bin), is_binary(KeyBin) ->
+    case new(Bin) of
+        {ok, Iter} ->
+            peek_loop(Iter, KeyBin);
+        {error, _} = Err ->
+            Err
+    end.
+
+%% @doc Find a value by navigating a path through nested documents.
+%% Path is a list of binary keys, e.g., [<<"outer">>, <<"inner">>, <<"value">>].
+%% Skips entire subdocuments efficiently using length prefixes.
+-spec find_path(binary(), [binary()]) -> {ok, atom(), map()} | not_found | {error, term()}.
+find_path(Bin, []) when is_binary(Bin) ->
+    %% Empty path - return the document itself as a value ref
+    case new(Bin) of
+        {ok, _} ->
+            {ok, document, #{bin => Bin, off => 0, len => byte_size(Bin)}};
+        {error, _} = Err ->
+            Err
+    end;
+find_path(Bin, [Key | RestPath]) when is_binary(Bin), is_binary(Key) ->
+    case peek(Bin, Key) of
+        {ok, Type, ValueRef} when RestPath =:= [] ->
+            {ok, Type, ValueRef};
+        {ok, document, #{bin := DocBin, off := Off, len := Len}} ->
+            %% Extract nested document and continue
+            NestedDoc = binary:part(DocBin, Off, Len),
+            find_path(NestedDoc, RestPath);
+        {ok, array, #{bin := DocBin, off := Off, len := Len}} ->
+            %% Arrays are documents, can navigate into them
+            NestedDoc = binary:part(DocBin, Off, Len),
+            find_path(NestedDoc, RestPath);
+        {ok, _OtherType, _} ->
+            %% Trying to navigate into a non-document type
+            not_found;
+        not_found ->
+            not_found;
+        {error, _} = Err ->
+            Err
+    end;
+find_path(_, _) ->
+    {error, invalid_arguments}.
+
 %% =============================================================================
 %% Internal Functions
 %% =============================================================================
+
+peek_loop(Iter, KeyBin) ->
+    case next(Iter) of
+        {ok, Key, Type, ValueRef, NextIter} ->
+            if
+                Key =:= KeyBin ->
+                    {ok, Type, ValueRef};
+                true ->
+                    peek_loop(NextIter, KeyBin)
+            end;
+        done ->
+            not_found;
+        {error, _} = Err ->
+            Err
+    end.
 
 validate_document(Bin, DeclaredLen, ActualSize) when DeclaredLen =:= ActualSize ->
     %% Check terminator byte

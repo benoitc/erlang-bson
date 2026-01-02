@@ -43,10 +43,11 @@ string_doc() ->
       0>>.                   %% Terminator
 
 %% Document with nested doc: {"outer": {"inner": 42}}
+%% Inner: length(4) + type(1) + "inner\0"(6) + int32(4) + term(1) = 16 bytes
 nested_doc() ->
-    InnerDoc = <<12:32/little, 16#10, "inner", 0, 42:32/little-signed, 0>>,
-    InnerLen = byte_size(InnerDoc),
-    OuterLen = 4 + 1 + 6 + InnerLen + 1, %% length + type + "outer\0" + inner + term
+    InnerDoc = <<16:32/little, 16#10, "inner", 0, 42:32/little-signed, 0>>,
+    InnerLen = byte_size(InnerDoc),  %% 16 bytes
+    OuterLen = 4 + 1 + 6 + InnerLen + 1, %% length + type + "outer\0" + inner + term = 28
     <<OuterLen:32/little,
       16#03,                 %% Type: document
       "outer", 0,            %% Key: "outer\0"
@@ -176,7 +177,7 @@ next_string_test() ->
 
 next_nested_doc_test() ->
     {ok, Iter} = bson_iter:new(nested_doc()),
-    {ok, <<"outer">>, document, #{len := 12}, Iter2} = bson_iter:next(Iter),
+    {ok, <<"outer">>, document, #{len := 16}, Iter2} = bson_iter:next(Iter),
     done = bson_iter:next(Iter2).
 
 next_boolean_test() ->
@@ -254,3 +255,73 @@ unsupported_type_test() ->
     Bin = <<8:32/little, 16#06, "x", 0, 0>>,
     {ok, Iter} = bson_iter:new(Bin),
     {error, {unsupported_type, 16#06}} = bson_iter:next(Iter).
+
+%% =============================================================================
+%% peek/2 Tests
+%% =============================================================================
+
+peek_existing_key_test() ->
+    Bin = multi_field_doc(),
+    {ok, int32, #{len := 4}} = bson_iter:peek(Bin, <<"a">>),
+    {ok, double, #{len := 8}} = bson_iter:peek(Bin, <<"b">>).
+
+peek_missing_key_test() ->
+    Bin = simple_int32_doc(),
+    not_found = bson_iter:peek(Bin, <<"nonexistent">>).
+
+peek_empty_doc_test() ->
+    Bin = empty_doc(),
+    not_found = bson_iter:peek(Bin, <<"anything">>).
+
+peek_invalid_doc_test() ->
+    {error, {invalid_length, _, _}} = bson_iter:peek(<<1,2,3>>, <<"key">>).
+
+%% =============================================================================
+%% find_path/2 Tests
+%% =============================================================================
+
+find_path_single_level_test() ->
+    Bin = simple_int32_doc(),
+    {ok, int32, #{len := 4}} = bson_iter:find_path(Bin, [<<"a">>]).
+
+find_path_nested_test() ->
+    Bin = nested_doc(),
+    %% {"outer": {"inner": 42}}
+    {ok, int32, #{len := 4}} = bson_iter:find_path(Bin, [<<"outer">>, <<"inner">>]).
+
+find_path_not_found_at_first_level_test() ->
+    Bin = nested_doc(),
+    not_found = bson_iter:find_path(Bin, [<<"missing">>]).
+
+find_path_not_found_at_second_level_test() ->
+    Bin = nested_doc(),
+    not_found = bson_iter:find_path(Bin, [<<"outer">>, <<"missing">>]).
+
+find_path_into_non_document_test() ->
+    %% Trying to navigate into an int32
+    Bin = simple_int32_doc(),
+    not_found = bson_iter:find_path(Bin, [<<"a">>, <<"deeper">>]).
+
+find_path_empty_path_test() ->
+    Bin = simple_int32_doc(),
+    {ok, document, #{off := 0}} = bson_iter:find_path(Bin, []).
+
+find_path_into_array_test() ->
+    Bin = array_doc(),
+    %% {"arr": [1, 2, 3]} - array elements have keys "0", "1", "2"
+    {ok, int32, _} = bson_iter:find_path(Bin, [<<"arr">>, <<"1">>]).
+
+find_path_deeply_nested_test() ->
+    %% Create a 3-level nested document: {"a": {"b": {"c": 99}}}
+    InnerMost = <<12:32/little, 16#10, "c", 0, 99:32/little-signed, 0>>,
+    MiddleContent = <<16#03, "b", 0, InnerMost/binary>>,
+    MiddleLen = 4 + byte_size(MiddleContent) + 1,
+    Middle = <<MiddleLen:32/little, MiddleContent/binary, 0>>,
+    OuterContent = <<16#03, "a", 0, Middle/binary>>,
+    OuterLen = 4 + byte_size(OuterContent) + 1,
+    Outer = <<OuterLen:32/little, OuterContent/binary, 0>>,
+
+    {ok, int32, _} = bson_iter:find_path(Outer, [<<"a">>, <<"b">>, <<"c">>]),
+    {ok, document, _} = bson_iter:find_path(Outer, [<<"a">>, <<"b">>]),
+    {ok, document, _} = bson_iter:find_path(Outer, [<<"a">>]),
+    not_found = bson_iter:find_path(Outer, [<<"a">>, <<"b">>, <<"d">>]).
