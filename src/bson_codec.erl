@@ -3,22 +3,67 @@
 %% This module provides convenience functions for encoding Erlang maps to BSON
 %% and decoding BSON to Erlang maps. It is built on top of bson_iter for parsing.
 %%
-%% Type mappings:
-%%   Erlang          | BSON
-%%   ----------------|------------------
-%%   integer         | int32 or int64
-%%   float           | double
-%%   binary          | string (UTF-8)
-%%   true/false      | boolean
-%%   null            | null
-%%   map             | document
-%%   list            | array
-%%   {objectid, Bin} | objectid
-%%   {datetime_ms,N} | datetime
-%%   {binary,S,D}    | binary
-%%   {timestamp,I,T} | timestamp
-%%   {decimal128,C,E}| decimal128
-%%   {regex, P, O}   | regex
+%% This is NOT the hot path module - it fully decodes/encodes documents and is
+%% suitable for ingest, admin tools, and testing. For query hot paths, use
+%% `bson_iter' directly for zero-copy traversal.
+%%
+%% == Type Mappings ==
+%%
+%% ```
+%% Erlang Value                    | BSON Type
+%% --------------------------------|------------------
+%% integer (fits in 32 bits)       | int32
+%% integer (requires 64 bits)      | int64
+%% float                           | double
+%% binary                          | string (UTF-8)
+%% true | false                    | boolean
+%% null                            | null
+%% map                             | document
+%% list                            | array
+%% {objectid, <<12 bytes>>}        | objectid
+%% {datetime_ms, MillisInt}        | datetime
+%% {binary, Subtype, Data}         | binary
+%% {timestamp, Increment, Time}    | timestamp
+%% {decimal128, Coeff, Exp}        | decimal128
+%% {decimal128, infinity, _}       | decimal128 +Inf
+%% {decimal128, neg_infinity, _}   | decimal128 -Inf
+%% {decimal128, nan, _}            | decimal128 NaN
+%% {regex, Pattern, Options}       | regex
+%% minkey                          | minkey
+%% maxkey                          | maxkey
+%% '''
+%%
+%% == Requirements ==
+%%
+%% <ul>
+%%   <li>Map keys must be binaries</li>
+%%   <li>Integers must fit in 64-bit signed range</li>
+%%   <li>ObjectId must be exactly 12 bytes</li>
+%% </ul>
+%%
+%% == Memory Safety ==
+%%
+%% All decoded values are copied using `binary:copy/1' to break references
+%% to the source binary. This ensures decoded maps don't retain large
+%% source documents in memory.
+%%
+%% == Example Usage ==
+%%
+%% ```
+%% %% Encode a map to BSON
+%% Map = #{
+%%     <<"_id">> => {objectid, <<1,2,3,4,5,6,7,8,9,10,11,12>>},
+%%     <<"name">> => <<"Test">>,
+%%     <<"count">> => 42,
+%%     <<"tags">> => [<<"a">>, <<"b">>]
+%% },
+%% {ok, BsonBin} = bson_codec:encode_map(Map).
+%%
+%% %% Decode BSON to a map
+%% {ok, DecodedMap} = bson_codec:decode_map(BsonBin).
+%% '''
+%%
+%% @end
 -module(bson_codec).
 
 -include("bson_types.hrl").

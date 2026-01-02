@@ -4,8 +4,55 @@
 %% decoding values eagerly. It uses offset-based ValueRefs to defer
 %% decoding until explicitly requested.
 %%
-%% WARNING: ValueRefs retain a reference to the original binary.
-%% Call decode_value/2 to get a copied value that doesn't retain the source.
+%% == Design ==
+%%
+%% The iterator operates directly on the raw BSON binary using offsets,
+%% allowing traversal without memory allocation for values. This is
+%% ideal for hot paths like query filtering where only specific fields
+%% need to be accessed.
+%%
+%% == API Overview ==
+%%
+%% <ul>
+%%   <li>`new/1' - Create an iterator from a BSON binary</li>
+%%   <li>`next/1' - Get next element (key, type, value ref)</li>
+%%   <li>`peek/2' - Find a key at top level without iteration state</li>
+%%   <li>`find_path/2' - Navigate nested documents via path</li>
+%%   <li>`decode_value/2' - Decode a value ref to Erlang term</li>
+%% </ul>
+%%
+%% == ValueRef and Memory Safety ==
+%%
+%% ValueRefs are maps containing `#{bin, off, len}' that point into the
+%% original binary without copying data. This is efficient but means
+%% the original binary is retained in memory as long as any ValueRef
+%% derived from it exists.
+%%
+%% To break this reference chain, call `decode_value/2' which uses
+%% `binary:copy/1' internally. For full document decoding, use
+%% `bson_codec:decode_map/1' which ensures all data is copied.
+%%
+%% == Example Usage ==
+%%
+%% ```
+%% %% Traverse and find a field
+%% {ok, Iter} = bson_iter:new(BsonBin),
+%% case bson_iter:next(Iter) of
+%%     {ok, Key, Type, ValueRef, Iter2} ->
+%%         {ok, Value} = bson_iter:decode_value(Type, ValueRef),
+%%         ...;
+%%     done -> ...
+%% end.
+%%
+%% %% Quick lookup without full iteration
+%% {ok, Type, ValueRef} = bson_iter:peek(BsonBin, <<"fieldname">>),
+%% {ok, Value} = bson_iter:decode_value(Type, ValueRef).
+%%
+%% %% Nested path lookup
+%% {ok, Type, ValueRef} = bson_iter:find_path(BsonBin, [<<"a">>, <<"b">>, <<"c">>]).
+%% '''
+%%
+%% @end
 -module(bson_iter).
 
 -include("bson_types.hrl").
