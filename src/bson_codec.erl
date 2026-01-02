@@ -25,7 +25,8 @@
 
 %% API exports
 -export([
-    encode_map/1
+    encode_map/1,
+    decode_map/1
 ]).
 
 %% =============================================================================
@@ -46,6 +47,73 @@ encode_map(Map) when is_map(Map) ->
     end;
 encode_map(_) ->
     {error, not_a_map}.
+
+%% @doc Decode a BSON binary document to an Erlang map.
+%% All values are fully decoded and binaries are copied to break reference chains.
+-spec decode_map(binary()) -> {ok, map()} | {error, term()}.
+decode_map(Bin) when is_binary(Bin) ->
+    case bson_iter:new(Bin) of
+        {ok, Iter} ->
+            decode_document(Iter);
+        {error, _} = Err ->
+            Err
+    end;
+decode_map(_) ->
+    {error, not_a_binary}.
+
+%% =============================================================================
+%% Internal Functions - Decoding
+%% =============================================================================
+
+decode_document(Iter) ->
+    decode_elements(Iter, #{}).
+
+decode_elements(Iter, Acc) ->
+    case bson_iter:next(Iter) of
+        {ok, Key, Type, ValueRef, NextIter} ->
+            case decode_field_value(Type, ValueRef) of
+                {ok, Value} ->
+                    decode_elements(NextIter, Acc#{Key => Value});
+                {error, _} = Err ->
+                    Err
+            end;
+        done ->
+            {ok, Acc};
+        {error, _} = Err ->
+            Err
+    end.
+
+decode_field_value(document, #{bin := Bin, off := Off, len := Len}) ->
+    DocBin = binary:part(Bin, Off, Len),
+    decode_map(DocBin);
+decode_field_value(array, #{bin := Bin, off := Off, len := Len}) ->
+    ArrayBin = binary:part(Bin, Off, Len),
+    decode_array(ArrayBin);
+decode_field_value(Type, ValueRef) ->
+    bson_iter:decode_value(Type, ValueRef).
+
+decode_array(Bin) ->
+    case bson_iter:new(Bin) of
+        {ok, Iter} ->
+            decode_array_elements(Iter, []);
+        {error, _} = Err ->
+            Err
+    end.
+
+decode_array_elements(Iter, Acc) ->
+    case bson_iter:next(Iter) of
+        {ok, _Key, Type, ValueRef, NextIter} ->
+            case decode_field_value(Type, ValueRef) of
+                {ok, Value} ->
+                    decode_array_elements(NextIter, [Value | Acc]);
+                {error, _} = Err ->
+                    Err
+            end;
+        done ->
+            {ok, lists:reverse(Acc)};
+        {error, _} = Err ->
+            Err
+    end.
 
 %% =============================================================================
 %% Internal Functions - Encoding

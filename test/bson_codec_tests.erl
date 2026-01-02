@@ -213,3 +213,125 @@ encode_decimal128_nan_test() ->
     {ok, Bin} = bson_codec:encode_map(#{<<"d">> => {decimal128, nan, 0}}),
     {ok, decimal128, ValueRef} = bson_iter:peek(Bin, <<"d">>),
     {ok, {decimal128, nan, 0}} = bson_iter:decode_value(decimal128, ValueRef).
+
+%% =============================================================================
+%% decode_map/1 Tests - Roundtrip
+%% =============================================================================
+
+decode_empty_map_test() ->
+    {ok, Bin} = bson_codec:encode_map(#{}),
+    {ok, #{}} = bson_codec:decode_map(Bin).
+
+decode_simple_int_test() ->
+    Original = #{<<"a">> => 42},
+    {ok, Bin} = bson_codec:encode_map(Original),
+    {ok, Original} = bson_codec:decode_map(Bin).
+
+decode_multiple_fields_test() ->
+    Original = #{
+        <<"a">> => 1,
+        <<"b">> => <<"hello">>,
+        <<"c">> => true
+    },
+    {ok, Bin} = bson_codec:encode_map(Original),
+    {ok, Original} = bson_codec:decode_map(Bin).
+
+decode_nested_map_test() ->
+    Original = #{<<"outer">> => #{<<"inner">> => 42}},
+    {ok, Bin} = bson_codec:encode_map(Original),
+    {ok, Original} = bson_codec:decode_map(Bin).
+
+decode_array_test() ->
+    Original = #{<<"arr">> => [1, 2, 3]},
+    {ok, Bin} = bson_codec:encode_map(Original),
+    {ok, Original} = bson_codec:decode_map(Bin).
+
+decode_mixed_array_test() ->
+    Original = #{<<"arr">> => [1, <<"hello">>, true, null]},
+    {ok, Bin} = bson_codec:encode_map(Original),
+    {ok, Original} = bson_codec:decode_map(Bin).
+
+decode_nested_array_test() ->
+    Original = #{<<"arr">> => [[1, 2], [3, 4]]},
+    {ok, Bin} = bson_codec:encode_map(Original),
+    {ok, Original} = bson_codec:decode_map(Bin).
+
+decode_deeply_nested_test() ->
+    Original = #{<<"a">> => #{<<"b">> => #{<<"c">> => 99}}},
+    {ok, Bin} = bson_codec:encode_map(Original),
+    {ok, Original} = bson_codec:decode_map(Bin).
+
+%% =============================================================================
+%% decode_map/1 Tests - Special Types
+%% =============================================================================
+
+decode_objectid_test() ->
+    Oid = <<1,2,3,4,5,6,7,8,9,10,11,12>>,
+    Original = #{<<"_id">> => {objectid, Oid}},
+    {ok, Bin} = bson_codec:encode_map(Original),
+    {ok, Original} = bson_codec:decode_map(Bin).
+
+decode_datetime_test() ->
+    Original = #{<<"ts">> => {datetime_ms, 1704067200000}},
+    {ok, Bin} = bson_codec:encode_map(Original),
+    {ok, Original} = bson_codec:decode_map(Bin).
+
+decode_binary_data_test() ->
+    Original = #{<<"data">> => {binary, 0, <<1,2,3>>}},
+    {ok, Bin} = bson_codec:encode_map(Original),
+    {ok, Original} = bson_codec:decode_map(Bin).
+
+decode_timestamp_test() ->
+    Original = #{<<"ts">> => {timestamp, 100, 1234567890}},
+    {ok, Bin} = bson_codec:encode_map(Original),
+    {ok, Original} = bson_codec:decode_map(Bin).
+
+decode_regex_test() ->
+    Original = #{<<"r">> => {regex, <<"^test.*">>, <<"im">>}},
+    {ok, Bin} = bson_codec:encode_map(Original),
+    {ok, Original} = bson_codec:decode_map(Bin).
+
+decode_minmax_key_test() ->
+    Original = #{<<"min">> => minkey, <<"max">> => maxkey},
+    {ok, Bin} = bson_codec:encode_map(Original),
+    {ok, Original} = bson_codec:decode_map(Bin).
+
+decode_decimal128_test() ->
+    Original = #{<<"d">> => {decimal128, 12345, -2}},
+    {ok, Bin} = bson_codec:encode_map(Original),
+    {ok, Original} = bson_codec:decode_map(Bin).
+
+%% =============================================================================
+%% decode_map/1 Tests - Error Cases
+%% =============================================================================
+
+decode_non_binary_test() ->
+    {error, not_a_binary} = bson_codec:decode_map([1, 2, 3]).
+
+decode_malformed_test() ->
+    %% Invalid length
+    {error, {invalid_length, _, _}} = bson_codec:decode_map(<<1, 2, 3>>).
+
+%% =============================================================================
+%% Complex Roundtrip Tests
+%% =============================================================================
+
+complex_document_roundtrip_test() ->
+    Original = #{
+        <<"_id">> => {objectid, <<1,2,3,4,5,6,7,8,9,10,11,12>>},
+        <<"name">> => <<"Test Document">>,
+        <<"count">> => 42,
+        <<"active">> => true,
+        <<"data">> => null,
+        <<"tags">> => [<<"a">>, <<"b">>, <<"c">>],
+        <<"nested">> => #{
+            <<"x">> => 1,
+            <<"y">> => 2,
+            <<"z">> => 3
+        },
+        <<"created">> => {datetime_ms, 1704067200000},
+        <<"blob">> => {binary, 0, <<255, 0, 128>>}
+    },
+    {ok, Bin} = bson_codec:encode_map(Original),
+    {ok, Decoded} = bson_codec:decode_map(Bin),
+    ?assertEqual(Original, Decoded).
