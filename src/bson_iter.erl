@@ -239,31 +239,39 @@ decode_decimal128(<<Low:64/little-unsigned, High:64/little-unsigned>>) ->
     Sign = (High bsr 63) band 1,
 
     %% Check combination field (bits 58-62 of high word)
+    %% G0-G1 are bits 62-61
     CombHigh2 = (High bsr 61) band 16#3,
 
     case CombHigh2 of
         2#11 ->
             %% Special value or large coefficient
-            CombHigh4 = (High bsr 59) band 16#F,
-            case CombHigh4 of
-                2#1111 ->
-                    %% NaN
-                    {ok, {decimal128, nan, 0}};
-                2#1110 ->
-                    %% Infinity
-                    case Sign of
-                        0 -> {ok, {decimal128, infinity, 0}};
-                        1 -> {ok, {decimal128, neg_infinity, 0}}
-                    end;
-                _ ->
-                    %% Large coefficient format
+            %% Check G2 (bit 60)
+            G2 = (High bsr 60) band 1,
+            case G2 of
+                0 ->
+                    %% Large coefficient format (G0-G1-G2 = 110)
                     Exponent = ((High bsr 47) band 16#3FFF) - 6176,
                     %% Implicit leading bits 100 for coefficient
                     CoeffHigh = (8 bor ((High bsr 46) band 1)) bsl 110,
                     CoeffMid = (High band 16#3FFFFFFFFFFF) bsl 64,
                     Coefficient = CoeffHigh bor CoeffMid bor Low,
                     SignedCoeff = apply_sign(Sign, Coefficient),
-                    {ok, {decimal128, SignedCoeff, Exponent}}
+                    {ok, {decimal128, SignedCoeff, Exponent}};
+                1 ->
+                    %% G0-G1-G2 = 111, check G3-G4 for infinity/NaN
+                    %% G3 is bit 59, G4 is bit 58
+                    G4 = (High bsr 58) band 1,
+                    case G4 of
+                        0 ->
+                            %% Infinity (G3-G4 pattern with G4=0)
+                            case Sign of
+                                0 -> {ok, {decimal128, infinity, 0}};
+                                1 -> {ok, {decimal128, neg_infinity, 0}}
+                            end;
+                        1 ->
+                            %% NaN (G4=1)
+                            {ok, {decimal128, nan, 0}}
+                    end
             end;
         _ ->
             %% Normal format
