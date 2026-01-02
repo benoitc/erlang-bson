@@ -15,7 +15,8 @@
     new/1,
     next/1,
     peek/2,
-    find_path/2
+    find_path/2,
+    decode_value/2
 ]).
 
 %% Types
@@ -112,9 +113,169 @@ find_path(Bin, [Key | RestPath]) when is_binary(Bin), is_binary(Key) ->
 find_path(_, _) ->
     {error, invalid_arguments}.
 
+%% @doc Decode a value from a ValueRef into an Erlang term.
+%% All binary data is copied using binary:copy/1 to break reference chains.
+%% Embedded documents/arrays are NOT recursively decoded - use decode_map/1 for that.
+-spec decode_value(atom(), map()) -> {ok, term()} | {error, term()}.
+decode_value(double, #{bin := Bin, off := Off, len := 8}) ->
+    <<_:Off/binary, Value:64/little-float, _/binary>> = Bin,
+    {ok, Value};
+
+decode_value(string, #{bin := Bin, off := Off, len := Len}) when Len >= 5 ->
+    %% String format: int32 length + data + null
+    <<_:Off/binary, StrLen:32/little, _/binary>> = Bin,
+    DataStart = Off + 4,
+    DataLen = StrLen - 1,  %% Exclude null terminator
+    if
+        DataLen >= 0, DataLen + 5 =< Len ->
+            StrBin = binary:copy(binary:part(Bin, DataStart, DataLen)),
+            {ok, StrBin};
+        true ->
+            {error, {invalid_string, Off}}
+    end;
+
+decode_value(document, #{bin := Bin, off := Off, len := Len}) ->
+    %% Return the raw document binary (copied)
+    DocBin = binary:copy(binary:part(Bin, Off, Len)),
+    {ok, {document, DocBin}};
+
+decode_value(array, #{bin := Bin, off := Off, len := Len}) ->
+    %% Return the raw array binary (copied) - caller can iterate if needed
+    ArrayBin = binary:copy(binary:part(Bin, Off, Len)),
+    {ok, {array, ArrayBin}};
+
+decode_value(binary, #{bin := Bin, off := Off, len := Len}) when Len >= 5 ->
+    %% Binary format: int32 length + subtype byte + data
+    <<_:Off/binary, DataLen:32/little, Subtype:8, _/binary>> = Bin,
+    DataStart = Off + 5,
+    if
+        DataLen >= 0, DataLen + 5 =:= Len ->
+            Data = binary:copy(binary:part(Bin, DataStart, DataLen)),
+            {ok, {binary, Subtype, Data}};
+        true ->
+            {error, {invalid_binary, Off}}
+    end;
+
+decode_value(objectid, #{bin := Bin, off := Off, len := 12}) ->
+    OidBin = binary:copy(binary:part(Bin, Off, 12)),
+    {ok, {objectid, OidBin}};
+
+decode_value(boolean, #{bin := Bin, off := Off, len := 1}) ->
+    <<_:Off/binary, Value:8, _/binary>> = Bin,
+    case Value of
+        0 -> {ok, false};
+        1 -> {ok, true};
+        _ -> {error, {invalid_boolean, Value, Off}}
+    end;
+
+decode_value(datetime, #{bin := Bin, off := Off, len := 8}) ->
+    <<_:Off/binary, Value:64/little-signed, _/binary>> = Bin,
+    {ok, {datetime_ms, Value}};
+
+decode_value(null, #{len := 0}) ->
+    {ok, null};
+
+decode_value(int32, #{bin := Bin, off := Off, len := 4}) ->
+    <<_:Off/binary, Value:32/little-signed, _/binary>> = Bin,
+    {ok, Value};
+
+decode_value(int64, #{bin := Bin, off := Off, len := 8}) ->
+    <<_:Off/binary, Value:64/little-signed, _/binary>> = Bin,
+    {ok, Value};
+
+decode_value(timestamp, #{bin := Bin, off := Off, len := 8}) ->
+    %% MongoDB timestamp: uint32 increment + uint32 timestamp
+    <<_:Off/binary, Increment:32/little-unsigned, Timestamp:32/little-unsigned, _/binary>> = Bin,
+    {ok, {timestamp, Increment, Timestamp}};
+
+decode_value(decimal128, #{bin := Bin, off := Off, len := 16}) ->
+    %% Extract raw 16 bytes, decode later
+    RawBin = binary:part(Bin, Off, 16),
+    decode_decimal128(RawBin);
+
+decode_value(minkey, #{len := 0}) ->
+    {ok, minkey};
+
+decode_value(maxkey, #{len := 0}) ->
+    {ok, maxkey};
+
+decode_value(regex, #{bin := Bin, off := Off, len := Len}) ->
+    %% Regex: cstring pattern + cstring options
+    SearchBin = binary:part(Bin, Off, Len),
+    case find_null(SearchBin, 0) of
+        {ok, PatternLen} ->
+            Pattern = binary:copy(binary:part(Bin, Off, PatternLen)),
+            OptionsStart = Off + PatternLen + 1,
+            OptionsLen = Len - PatternLen - 2,  %% -2 for both nulls
+            Options = binary:copy(binary:part(Bin, OptionsStart, OptionsLen)),
+            {ok, {regex, Pattern, Options}};
+        not_found ->
+            {error, {invalid_regex, Off}}
+    end;
+
+decode_value(javascript, #{bin := Bin, off := Off, len := Len}) when Len >= 5 ->
+    %% JavaScript: same format as string
+    <<_:Off/binary, StrLen:32/little, _/binary>> = Bin,
+    DataStart = Off + 4,
+    DataLen = StrLen - 1,
+    if
+        DataLen >= 0, DataLen + 5 =< Len ->
+            JsBin = binary:copy(binary:part(Bin, DataStart, DataLen)),
+            {ok, {javascript, JsBin}};
+        true ->
+            {error, {invalid_javascript, Off}}
+    end;
+
+decode_value(Type, _ValueRef) ->
+    {error, {unsupported_decode, Type}}.
+
 %% =============================================================================
 %% Internal Functions
 %% =============================================================================
+
+%% Decode IEEE 754-2008 decimal128 to {decimal128, Coefficient, Exponent}
+decode_decimal128(<<Low:64/little-unsigned, High:64/little-unsigned>>) ->
+    %% Extract sign bit (bit 63 of high word)
+    Sign = (High bsr 63) band 1,
+
+    %% Check combination field (bits 58-62 of high word)
+    CombHigh2 = (High bsr 61) band 16#3,
+
+    case CombHigh2 of
+        2#11 ->
+            %% Special value or large coefficient
+            CombHigh4 = (High bsr 59) band 16#F,
+            case CombHigh4 of
+                2#1111 ->
+                    %% NaN
+                    {ok, {decimal128, nan, 0}};
+                2#1110 ->
+                    %% Infinity
+                    case Sign of
+                        0 -> {ok, {decimal128, infinity, 0}};
+                        1 -> {ok, {decimal128, neg_infinity, 0}}
+                    end;
+                _ ->
+                    %% Large coefficient format
+                    Exponent = ((High bsr 47) band 16#3FFF) - 6176,
+                    %% Implicit leading bits 100 for coefficient
+                    CoeffHigh = (8 bor ((High bsr 46) band 1)) bsl 110,
+                    CoeffMid = (High band 16#3FFFFFFFFFFF) bsl 64,
+                    Coefficient = CoeffHigh bor CoeffMid bor Low,
+                    SignedCoeff = apply_sign(Sign, Coefficient),
+                    {ok, {decimal128, SignedCoeff, Exponent}}
+            end;
+        _ ->
+            %% Normal format
+            Exponent = ((High bsr 49) band 16#3FFF) - 6176,
+            CoeffHigh = (High band 16#1FFFFFFFFFFFF) bsl 64,
+            Coefficient = CoeffHigh bor Low,
+            SignedCoeff = apply_sign(Sign, Coefficient),
+            {ok, {decimal128, SignedCoeff, Exponent}}
+    end.
+
+apply_sign(0, Coeff) -> Coeff;
+apply_sign(1, Coeff) -> -Coeff.
 
 peek_loop(Iter, KeyBin) ->
     case next(Iter) of

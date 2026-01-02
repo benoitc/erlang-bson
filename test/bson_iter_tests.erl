@@ -325,3 +325,106 @@ find_path_deeply_nested_test() ->
     {ok, document, _} = bson_iter:find_path(Outer, [<<"a">>, <<"b">>]),
     {ok, document, _} = bson_iter:find_path(Outer, [<<"a">>]),
     not_found = bson_iter:find_path(Outer, [<<"a">>, <<"b">>, <<"d">>]).
+
+%% =============================================================================
+%% decode_value/2 Tests
+%% =============================================================================
+
+decode_double_test() ->
+    Bin = multi_field_doc(),
+    {ok, double, ValueRef} = bson_iter:peek(Bin, <<"b">>),
+    {ok, 2.5} = bson_iter:decode_value(double, ValueRef).
+
+decode_int32_test() ->
+    Bin = simple_int32_doc(),
+    {ok, int32, ValueRef} = bson_iter:peek(Bin, <<"a">>),
+    {ok, 1} = bson_iter:decode_value(int32, ValueRef).
+
+decode_string_test() ->
+    Bin = string_doc(),
+    {ok, string, ValueRef} = bson_iter:peek(Bin, <<"name">>),
+    {ok, <<"test">>} = bson_iter:decode_value(string, ValueRef).
+
+decode_boolean_true_test() ->
+    Bin = boolean_doc(),
+    {ok, boolean, ValueRef} = bson_iter:peek(Bin, <<"flag">>),
+    {ok, true} = bson_iter:decode_value(boolean, ValueRef).
+
+decode_boolean_false_test() ->
+    %% Create a doc with false: {"flag": false}
+    Bin = <<12:32/little, 16#08, "flag", 0, 0, 0>>,
+    {ok, boolean, ValueRef} = bson_iter:peek(Bin, <<"flag">>),
+    {ok, false} = bson_iter:decode_value(boolean, ValueRef).
+
+decode_null_test() ->
+    Bin = null_doc(),
+    {ok, null, ValueRef} = bson_iter:peek(Bin, <<"nothing">>),
+    {ok, null} = bson_iter:decode_value(null, ValueRef).
+
+decode_objectid_test() ->
+    Bin = objectid_doc(),
+    {ok, objectid, ValueRef} = bson_iter:peek(Bin, <<"_id">>),
+    {ok, {objectid, OidBin}} = bson_iter:decode_value(objectid, ValueRef),
+    ?assertEqual(<<1,2,3,4,5,6,7,8,9,10,11,12>>, OidBin).
+
+decode_datetime_test() ->
+    Bin = datetime_doc(),
+    {ok, datetime, ValueRef} = bson_iter:peek(Bin, <<"ts">>),
+    {ok, {datetime_ms, Ms}} = bson_iter:decode_value(datetime, ValueRef),
+    ?assertEqual(1704067200000, Ms).
+
+decode_int64_test() ->
+    Bin = int64_doc(),
+    {ok, int64, ValueRef} = bson_iter:peek(Bin, <<"big">>),
+    {ok, 9223372036854775807} = bson_iter:decode_value(int64, ValueRef).
+
+decode_binary_test() ->
+    Bin = binary_doc(),
+    {ok, binary, ValueRef} = bson_iter:peek(Bin, <<"data">>),
+    {ok, {binary, 0, <<1,2,3>>}} = bson_iter:decode_value(binary, ValueRef).
+
+decode_document_test() ->
+    Bin = nested_doc(),
+    {ok, document, ValueRef} = bson_iter:peek(Bin, <<"outer">>),
+    {ok, {document, DocBin}} = bson_iter:decode_value(document, ValueRef),
+    %% Verify the extracted document is valid
+    {ok, _} = bson_iter:new(DocBin).
+
+decode_array_test() ->
+    Bin = array_doc(),
+    {ok, array, ValueRef} = bson_iter:peek(Bin, <<"arr">>),
+    {ok, {array, ArrBin}} = bson_iter:decode_value(array, ValueRef),
+    %% Verify the extracted array is a valid document
+    {ok, _} = bson_iter:new(ArrBin).
+
+decode_timestamp_test() ->
+    %% Create a timestamp doc: {"ts": timestamp(100, 1234567890)}
+    %% length(4) + type(1) + "ts\0"(3) + timestamp(8) + term(1) = 17 bytes
+    Bin = <<17:32/little, 16#11, "ts", 0, 100:32/little-unsigned, 1234567890:32/little-unsigned, 0>>,
+    {ok, timestamp, ValueRef} = bson_iter:peek(Bin, <<"ts">>),
+    {ok, {timestamp, 100, 1234567890}} = bson_iter:decode_value(timestamp, ValueRef).
+
+%% Test that decoded binaries are independent copies
+decode_binary_copy_test() ->
+    Bin = string_doc(),
+    {ok, string, ValueRef} = bson_iter:peek(Bin, <<"name">>),
+    {ok, StrBin} = bson_iter:decode_value(string, ValueRef),
+    %% Verify string is correct
+    ?assertEqual(<<"test">>, StrBin),
+    %% Check that it's a separate binary (by checking reference)
+    %% binary:referenced_byte_size returns size of underlying binary
+    %% For a copy, this should equal the actual size
+    RefSize = binary:referenced_byte_size(StrBin),
+    ?assertEqual(4, RefSize).
+
+decode_minkey_test() ->
+    %% Create a minkey doc: {"k": minkey}
+    Bin = <<8:32/little, 16#FF, "k", 0, 0>>,
+    {ok, minkey, ValueRef} = bson_iter:peek(Bin, <<"k">>),
+    {ok, minkey} = bson_iter:decode_value(minkey, ValueRef).
+
+decode_maxkey_test() ->
+    %% Create a maxkey doc: {"k": maxkey}
+    Bin = <<8:32/little, 16#7F, "k", 0, 0>>,
+    {ok, maxkey, ValueRef} = bson_iter:peek(Bin, <<"k">>),
+    {ok, maxkey} = bson_iter:decode_value(maxkey, ValueRef).
