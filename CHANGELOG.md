@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-01-03
+
+### Changed
+
+- Renamed application from `erlang_bson` to `ebson`
+- Renamed `bson_codec` module to `ebson`
+- Renamed `bson_iter` module to `ebson_iter`
+
+### Added
+
+- GitHub Actions CI for OTP 25, 26, 27
+
+### Fixed
+
+- Binary copy test compatibility across OTP versions
+
 ## [0.1.0] - 2026-01-03
 
 ### Added
