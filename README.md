@@ -1,7 +1,7 @@
-# erlang_bson
+# ebson
 
 [![CI](https://github.com/benoitc/erlang-bson/actions/workflows/ci.yml/badge.svg)](https://github.com/benoitc/erlang-bson/actions/workflows/ci.yml)
-[![Hex.pm](https://img.shields.io/hexpm/v/erlang_bson.svg)](https://hex.pm/packages/erlang_bson)
+[![Hex.pm](https://img.shields.io/hexpm/v/ebson.svg)](https://hex.pm/packages/ebson)
 
 High-performance BSON encoder/decoder for Erlang.
 
@@ -18,7 +18,7 @@ Add to your `rebar.config`:
 
 ```erlang
 {deps, [
-    {erlang_bson, "0.1.0"}
+    {ebson, "0.1.0"}
 ]}.
 ```
 
@@ -33,13 +33,13 @@ Map = #{
     <<"age">> => 30,
     <<"tags">> => [<<"developer">>, <<"erlang">>]
 },
-{ok, Bson} = bson_codec:encode_map(Map).
+{ok, Bson} = ebson:encode_map(Map).
 ```
 
 ### Decode BSON to a map
 
 ```erlang
-{ok, Map} = bson_codec:decode_map(Bson).
+{ok, Map} = ebson:decode_map(Bson).
 ```
 
 ### Zero-copy traversal
@@ -75,7 +75,7 @@ Zero-copy BSON binary iterator for hot paths. Use this when you need to:
 - Access specific fields efficiently
 - Skip large nested structures
 
-### bson_codec
+### ebson
 
 Convenience encode/decode for Erlang maps. Use this when you need to:
 - Fully decode documents for processing
@@ -108,7 +108,7 @@ ValueRefs from `bson_iter` point into the original binary without copying. This 
 
 To release the source binary:
 - Call `bson_iter:decode_value/2` which uses `binary:copy/1`
-- Use `bson_codec:decode_map/1` for full document decode
+- Use `ebson:decode_map/1` for full document decode
 
 ## License
 

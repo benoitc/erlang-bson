@@ -57,14 +57,14 @@
 %%     <<"count">> => 42,
 %%     <<"tags">> => [<<"a">>, <<"b">>]
 %% },
-%% {ok, BsonBin} = bson_codec:encode_map(Map).
+%% {ok, BsonBin} = ebson:encode_map(Map).
 %%
 %% %% Decode BSON to a map
-%% {ok, DecodedMap} = bson_codec:decode_map(BsonBin).
+%% {ok, DecodedMap} = ebson:decode_map(BsonBin).
 %% '''
 %%
 %% @end
--module(bson_codec).
+-module(ebson).
 
 -include("bson_types.hrl").
 

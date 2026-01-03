@@ -1,4 +1,4 @@
-{application, erlang_bson, [
+{application, ebson, [
     {description, "High-performance BSON encoder/decoder for Erlang"},
     {vsn, "0.1.0"},
     {registered, []},

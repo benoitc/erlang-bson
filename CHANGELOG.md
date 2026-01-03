@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `find_path/2` - Navigate nested documents via path
   - `decode_value/2` - Decode value refs to Erlang terms
 
-- `bson_codec` module for map encode/decode
+- `ebson` module for map encode/decode
   - `encode_map/1` - Encode Erlang map to BSON binary
   - `decode_map/1` - Decode BSON binary to Erlang map
 
