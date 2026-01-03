@@ -1,5 +1,8 @@
 # erlang_bson
 
+[![CI](https://github.com/benoitc/erlang-bson/actions/workflows/ci.yml/badge.svg)](https://github.com/benoitc/erlang-bson/actions/workflows/ci.yml)
+[![Hex.pm](https://img.shields.io/hexpm/v/erlang_bson.svg)](https://hex.pm/packages/erlang_bson)
+
 High-performance BSON encoder/decoder for Erlang.
 
 ## Features
