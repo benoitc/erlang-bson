@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `bson_iter` module for zero-copy BSON binary traversal
+- `ebson_iter` module for zero-copy BSON binary traversal
   - `new/1` - Create iterator from BSON binary with validation
   - `next/1` - Iterate elements without decoding values
   - `peek/2` - Find key at top level without iteration state

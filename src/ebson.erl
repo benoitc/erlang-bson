@@ -97,7 +97,7 @@ encode_map(_) ->
 %% All values are fully decoded and binaries are copied to break reference chains.
 -spec decode_map(binary()) -> {ok, map()} | {error, term()}.
 decode_map(Bin) when is_binary(Bin) ->
-    case bson_iter:new(Bin) of
+    case ebson_iter:new(Bin) of
         {ok, Iter} ->
             decode_document(Iter);
         {error, _} = Err ->
@@ -114,7 +114,7 @@ decode_document(Iter) ->
     decode_elements(Iter, #{}).
 
 decode_elements(Iter, Acc) ->
-    case bson_iter:next(Iter) of
+    case ebson_iter:next(Iter) of
         {ok, Key, Type, ValueRef, NextIter} ->
             case decode_field_value(Type, ValueRef) of
                 {ok, Value} ->
@@ -135,10 +135,10 @@ decode_field_value(array, #{bin := Bin, off := Off, len := Len}) ->
     ArrayBin = binary:part(Bin, Off, Len),
     decode_array(ArrayBin);
 decode_field_value(Type, ValueRef) ->
-    bson_iter:decode_value(Type, ValueRef).
+    ebson_iter:decode_value(Type, ValueRef).
 
 decode_array(Bin) ->
-    case bson_iter:new(Bin) of
+    case ebson_iter:new(Bin) of
         {ok, Iter} ->
             decode_array_elements(Iter, []);
         {error, _} = Err ->
@@ -146,7 +146,7 @@ decode_array(Bin) ->
     end.
 
 decode_array_elements(Iter, Acc) ->
-    case bson_iter:next(Iter) of
+    case ebson_iter:next(Iter) of
         {ok, _Key, Type, ValueRef, NextIter} ->
             case decode_field_value(Type, ValueRef) of
                 {ok, Value} ->

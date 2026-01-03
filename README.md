@@ -46,29 +46,29 @@ Map = #{
 
 ```erlang
 %% Create iterator
-{ok, Iter} = bson_iter:new(Bson),
+{ok, Iter} = ebson_iter:new(Bson),
 
 %% Iterate elements
-{ok, Key, Type, ValueRef, Iter2} = bson_iter:next(Iter),
+{ok, Key, Type, ValueRef, Iter2} = ebson_iter:next(Iter),
 
 %% Decode only when needed
-{ok, Value} = bson_iter:decode_value(Type, ValueRef).
+{ok, Value} = ebson_iter:decode_value(Type, ValueRef).
 ```
 
 ### Direct field lookup
 
 ```erlang
 %% Find a top-level key
-{ok, Type, ValueRef} = bson_iter:peek(Bson, <<"name">>),
-{ok, <<"Alice">>} = bson_iter:decode_value(Type, ValueRef).
+{ok, Type, ValueRef} = ebson_iter:peek(Bson, <<"name">>),
+{ok, <<"Alice">>} = ebson_iter:decode_value(Type, ValueRef).
 
 %% Navigate nested paths
-{ok, Type, ValueRef} = bson_iter:find_path(Bson, [<<"address">>, <<"city">>]).
+{ok, Type, ValueRef} = ebson_iter:find_path(Bson, [<<"address">>, <<"city">>]).
 ```
 
 ## Modules
 
-### bson_iter
+### ebson_iter
 
 Zero-copy BSON binary iterator for hot paths. Use this when you need to:
 - Filter documents without full decode
@@ -104,10 +104,10 @@ Convenience encode/decode for Erlang maps. Use this when you need to:
 
 ## Memory Safety
 
-ValueRefs from `bson_iter` point into the original binary without copying. This is efficient but means the source binary stays in memory.
+ValueRefs from `ebson_iter` point into the original binary without copying. This is efficient but means the source binary stays in memory.
 
 To release the source binary:
-- Call `bson_iter:decode_value/2` which uses `binary:copy/1`
+- Call `ebson_iter:decode_value/2` which uses `binary:copy/1`
 - Use `ebson:decode_map/1` for full document decode
 
 ## License

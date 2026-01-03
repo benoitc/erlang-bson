@@ -30,30 +30,30 @@
 %%
 %% To break this reference chain, call `decode_value/2' which uses
 %% `binary:copy/1' internally. For full document decoding, use
-%% `bson_codec:decode_map/1' which ensures all data is copied.
+%% `ebson:decode_map/1' which ensures all data is copied.
 %%
 %% == Example Usage ==
 %%
 %% ```
 %% %% Traverse and find a field
-%% {ok, Iter} = bson_iter:new(BsonBin),
-%% case bson_iter:next(Iter) of
+%% {ok, Iter} = ebson_iter:new(BsonBin),
+%% case ebson_iter:next(Iter) of
 %%     {ok, Key, Type, ValueRef, Iter2} ->
-%%         {ok, Value} = bson_iter:decode_value(Type, ValueRef),
+%%         {ok, Value} = ebson_iter:decode_value(Type, ValueRef),
 %%         ...;
 %%     done -> ...
 %% end.
 %%
 %% %% Quick lookup without full iteration
-%% {ok, Type, ValueRef} = bson_iter:peek(BsonBin, <<"fieldname">>),
-%% {ok, Value} = bson_iter:decode_value(Type, ValueRef).
+%% {ok, Type, ValueRef} = ebson_iter:peek(BsonBin, <<"fieldname">>),
+%% {ok, Value} = ebson_iter:decode_value(Type, ValueRef).
 %%
 %% %% Nested path lookup
-%% {ok, Type, ValueRef} = bson_iter:find_path(BsonBin, [<<"a">>, <<"b">>, <<"c">>]).
+%% {ok, Type, ValueRef} = ebson_iter:find_path(BsonBin, [<<"a">>, <<"b">>, <<"c">>]).
 %% '''
 %%
 %% @end
--module(bson_iter).
+-module(ebson_iter).
 
 -include("bson_types.hrl").
 
