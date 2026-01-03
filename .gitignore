@@ -5,6 +5,9 @@ rebar.lock
 rebar3.crashdump
 erl_crash.dump
 
+# Generated docs
+doc/
+
 # IDE
 .idea/
 *.iml

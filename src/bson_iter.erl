@@ -132,8 +132,8 @@ peek(Bin, KeyBin) when is_binary(Bin), is_binary(KeyBin) ->
     end.
 
 %% @doc Find a value by navigating a path through nested documents.
-%% Path is a list of binary keys, e.g., [<<"outer">>, <<"inner">>, <<"value">>].
-%% Skips entire subdocuments efficiently using length prefixes.
+%% Path is a list of binary keys. Skips entire subdocuments efficiently
+%% using length prefixes.
 -spec find_path(binary(), [binary()]) -> {ok, bson_type(), value_ref()} | not_found | {error, term()}.
 find_path(Bin, []) when is_binary(Bin) ->
     %% Empty path - return the document itself as a value ref
