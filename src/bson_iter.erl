@@ -67,9 +67,15 @@
 ]).
 
 %% Types
--export_type([iter/0]).
+-export_type([iter/0, bson_type/0, value_ref/0]).
 
 -opaque iter() :: #bson_iter{}.
+
+-type bson_type() :: double | string | document | array | binary | objectid |
+                     boolean | datetime | null | int32 | int64 | timestamp |
+                     decimal128 | regex | javascript | minkey | maxkey.
+
+-type value_ref() :: #{bin := binary(), off := non_neg_integer(), len := non_neg_integer()}.
 
 %% Minimum BSON document size: 4 (length) + 1 (terminator) = 5 bytes
 -define(MIN_DOC_SIZE, 5).
@@ -96,7 +102,7 @@ new(_) ->
 %% @doc Advance to the next element in the document.
 %% Returns {ok, Key, Type, ValueRef, NewIter} for each element,
 %% 'done' when iteration is complete, or {error, Reason} on malformed input.
--spec next(iter()) -> {ok, binary(), atom(), map(), iter()} | done | {error, term()}.
+-spec next(iter()) -> {ok, binary(), bson_type(), value_ref(), iter()} | done | {error, term()}.
 next(#bson_iter{bin = Bin, pos = Pos, doc_end = DocEnd} = Iter) ->
     if
         Pos >= DocEnd ->
@@ -116,7 +122,7 @@ next(#bson_iter{bin = Bin, pos = Pos, doc_end = DocEnd} = Iter) ->
 %% @doc Look up a key at the top level of a BSON document without decoding.
 %% Returns {ok, Type, ValueRef} if found, not_found if key doesn't exist,
 %% or {error, Reason} on malformed input.
--spec peek(binary(), binary()) -> {ok, atom(), map()} | not_found | {error, term()}.
+-spec peek(binary(), binary()) -> {ok, bson_type(), value_ref()} | not_found | {error, term()}.
 peek(Bin, KeyBin) when is_binary(Bin), is_binary(KeyBin) ->
     case new(Bin) of
         {ok, Iter} ->
@@ -128,7 +134,7 @@ peek(Bin, KeyBin) when is_binary(Bin), is_binary(KeyBin) ->
 %% @doc Find a value by navigating a path through nested documents.
 %% Path is a list of binary keys, e.g., [<<"outer">>, <<"inner">>, <<"value">>].
 %% Skips entire subdocuments efficiently using length prefixes.
--spec find_path(binary(), [binary()]) -> {ok, atom(), map()} | not_found | {error, term()}.
+-spec find_path(binary(), [binary()]) -> {ok, bson_type(), value_ref()} | not_found | {error, term()}.
 find_path(Bin, []) when is_binary(Bin) ->
     %% Empty path - return the document itself as a value ref
     case new(Bin) of
@@ -163,7 +169,7 @@ find_path(_, _) ->
 %% @doc Decode a value from a ValueRef into an Erlang term.
 %% All binary data is copied using binary:copy/1 to break reference chains.
 %% Embedded documents/arrays are NOT recursively decoded - use decode_map/1 for that.
--spec decode_value(atom(), map()) -> {ok, term()} | {error, term()}.
+-spec decode_value(bson_type(), value_ref()) -> {ok, term()} | {error, term()}.
 decode_value(double, #{bin := Bin, off := Off, len := 8}) ->
     <<_:Off/binary, Value:64/little-float, _/binary>> = Bin,
     {ok, Value};

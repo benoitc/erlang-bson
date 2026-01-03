@@ -62,32 +62,4 @@
     doc_end :: non_neg_integer()  % Document end offset (before terminator)
 }).
 
-%% =============================================================================
-%% Value Reference
-%% =============================================================================
-%%
-%% ValueRef is a map pointing into the original binary without copying.
-%% Used by traversal to defer decoding until explicitly requested.
-%%
-%% Fields:
-%%   - bin: reference to the original binary
-%%   - off: byte offset where the value data starts
-%%   - len: byte length of the value data (or 'unknown' for cstrings/variable)
-%%
-%% Example: For a double at offset 15, ValueRef = #{bin => Bin, off => 15, len => 8}
-
--type value_ref() :: #{
-    bin := binary(),
-    off := non_neg_integer(),
-    len := non_neg_integer() | unknown
-}.
-
--type bson_type() ::
-    double | string | document | array | binary | objectid |
-    boolean | datetime | null | int32 | int64 | timestamp |
-    decimal128 | regex | javascript | minkey | maxkey |
-    {unsupported, byte()}.
-
--export_type([value_ref/0, bson_type/0]).
-
 -endif. % BSON_TYPES_HRL
