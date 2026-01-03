@@ -406,16 +406,25 @@ decode_timestamp_test() ->
 
 %% Test that decoded binaries are independent copies
 decode_binary_copy_test() ->
-    Bin = string_doc(),
-    {ok, string, ValueRef} = ebson_iter:peek(Bin, <<"name">>),
+    %% Create a large document (>64 bytes to ensure refc binary)
+    %% Document with a string field embedded in padding
+    Padding = binary:copy(<<0>>, 100),
+    LargeBin = <<120:32/little,          %% Document length
+                 16#02,                   %% Type: string
+                 "name", 0,               %% Key: "name\0"
+                 5:32/little,             %% String length (4 chars + null)
+                 "test", 0,               %% String value with null
+                 Padding/binary,          %% Padding to make it large
+                 0>>,                     %% Terminator
+    {ok, string, ValueRef} = ebson_iter:peek(LargeBin, <<"name">>),
     {ok, StrBin} = ebson_iter:decode_value(string, ValueRef),
     %% Verify string is correct
     ?assertEqual(<<"test">>, StrBin),
     %% Check that it's a separate binary (by checking reference)
     %% binary:referenced_byte_size returns size of underlying binary
-    %% For a copy, this should equal the actual size
+    %% For a copy, this should be much smaller than the source
     RefSize = binary:referenced_byte_size(StrBin),
-    ?assertEqual(4, RefSize).
+    ?assert(RefSize < 50).
 
 decode_minkey_test() ->
     %% Create a minkey doc: {"k": minkey}
